@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lista de Alunos</title>
+
+<style>
+    *{
+        margin:0;
+        padding:0;
+        box-sizing:border-box;
+        font-family: Arial, Helvetica, sans-serif;
+    }
+
+    body{
+        background:#f4f6f9;
+        min-height:100vh;
+        display:flex;
+        justify-content:center;
+        padding:30px 15px;
+    }
+
+    .container{
+        width:100%;
+        max-width:800px;
+        background:#fff;
+        border-radius:12px;
+        box-shadow:0 4px 20px rgba(0,0,0,.08);
+        overflow:hidden;
+    }
+
+    .header{
+        padding:25px;
+        background:#1e293b;
+        color:white;
+    }
+
+    .header h1{
+        font-size:1.6rem;
+    }
+
+    .content{
+        padding:25px;
+    }
+
+    .form{
+        display:flex;
+        gap:10px;
+        flex-wrap:wrap;
+        margin-bottom:25px;
+    }
+
+    input{
+        flex:1;
+        min-width:220px;
+        padding:12px;
+        border:1px solid #d1d5db;
+        border-radius:8px;
+        font-size:16px;
+    }
+
+    button{
+        background:#2563eb;
+        color:white;
+        border:none;
+        padding:12px 20px;
+        border-radius:8px;
+        cursor:pointer;
+        font-size:16px;
+        transition:.2s;
+    }
+
+    button:hover{
+        background:#1d4ed8;
+    }
+
+    .status{
+        margin-bottom:15px;
+        color:#475569;
+        font-size:14px;
+    }
+
+    ul{
+        list-style:none;
+        border:1px solid #e5e7eb;
+        border-radius:8px;
+        overflow:hidden;
+    }
+
+    li{
+        padding:14px 16px;
+    }
+
+    li:nth-child(odd){
+        background:#ffffff;
+    }
+
+    li:nth-child(even){
+        background:#f8fafc;
+    }
+
+    .empty{
+        text-align:center;
+        color:#64748b;
+        padding:30px;
+    }
+
+    @media (max-width:600px){
+        .form{
+            flex-direction:column;
+        }
+
+        button{
+            width:100%;
+        }
+    }
+</style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <h1>Lista de Alunos</h1>
+    </div>
+
+    <div class="content">
+
+        <div class="form">
+            <input
+                type="text"
+                id="studentName"
+                placeholder="Digite o nome do aluno"
+            >
+            <button onclick="addStudent()">
+                Salvar
+            </button>
+        </div>
+
+        <div class="status" id="status"></div>
+
+        <ul id="studentsList">
+            <li class="empty">Carregando...</li>
+        </ul>
+
+    </div>
+</div>
+
+<script>
+
+/*
+=====================================================
+CONFIGURAÇÃO
+Cole aqui a URL do Web App do Google Apps Script
+=====================================================
+*/
+const CONFIG = {
+    WEB_APP_URL: "COLE_AQUI_SUA_URL_DO_WEB_APP"
+};
+
+function setStatus(text){
+    document.getElementById("status").textContent = text;
+}
+
+function generateCallbackName(){
+    return "jsonp_" + Date.now() + "_" + Math.floor(Math.random()*100000);
+}
+
+/*
+=====================================================
+JSONP
+Evita problemas de CORS no GitHub Pages
+=====================================================
+*/
+function jsonpRequest(params){
+
+    return new Promise((resolve, reject)=>{
+
+        const callbackName = generateCallbackName();
+
+        params.callback = callbackName;
+
+        const query = new URLSearchParams(params).toString();
+
+        const script = document.createElement("script");
+
+        window[callbackName] = function(data){
+
+            resolve(data);
+
+            delete window[callbackName];
+
+            if(script.parentNode){
+                script.parentNode.removeChild(script);
+            }
+        };
+
+        script.onerror = function(){
+
+            reject(new Error("Falha na requisição"));
+
+            delete window[callbackName];
+
+            if(script.parentNode){
+                script.parentNode.removeChild(script);
+            }
+        };
+
+        script.src =
+            CONFIG.WEB_APP_URL +
+            "?" +
+            query;
+
+        document.body.appendChild(script);
+
+    });
+
+}
+
+async function loadStudents(){
+
+    try{
+
+        setStatus("Carregando alunos...");
+
+        const response = await jsonpRequest({
+            action:"list"
+        });
+
+        const list = document.getElementById("studentsList");
+
+        list.innerHTML = "";
+
+        const students = response.students || [];
+
+        if(students.length === 0){
+
+            list.innerHTML =
+                '<li class="empty">Nenhum aluno cadastrado.</li>';
+
+        }else{
+
+            students.forEach(student=>{
+
+                const li = document.createElement("li");
+
+                li.textContent = student.nome;
+
+                list.appendChild(li);
+
+            });
+
+        }
+
+        setStatus(
+            `${students.length} aluno(s) cadastrado(s)`
+        );
+
+    }catch(err){
+
+        console.error(err);
+
+        setStatus("Erro ao carregar alunos.");
+
+    }
+
+}
+
+async function addStudent(){
+
+    const input =
+        document.getElementById("studentName");
+
+    const nome =
+        input.value.trim();
+
+    if(!nome){
+
+        alert("Digite um nome.");
+
+        return;
+    }
+
+    try{
+
+        setStatus("Salvando...");
+
+        const response =
+            await jsonpRequest({
+                action:"add",
+                nome:nome
+            });
+
+        if(response.success){
+
+            input.value = "";
+
+            await loadStudents();
+
+        }else{
+
+            alert(
+                response.message ||
+                "Erro ao salvar."
+            );
+
+        }
+
+    }catch(err){
+
+        console.error(err);
+
+        alert("Erro ao salvar aluno.");
+
+    }
+
+}
+
+document
+.getElementById("studentName")
+.addEventListener("keypress", e => {
+
+    if(e.key === "Enter"){
+        addStudent();
+    }
+
+});
+
+loadStudents();
+
+</script>
+
+</body>
+</html>
